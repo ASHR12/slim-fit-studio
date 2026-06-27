@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Camera Settings</title>
+    <style>
+      :root {
+        --bg: #000000;
+        --group: #1c1c1e;
+        --group-press: #2c2c2e;
+        --separator: rgb(84 84 88 / 60%);
+        --label: #ffffff;
+        --secondary: #8e8e93;
+        --tertiary: #636366;
+        --blue: #0a84ff;
+        --green: #30d158;
+        --red: #ff453a;
+        --fill-track: #48484a;
+        --radius: 12px;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui,
+          "Helvetica Neue", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--label);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .app-frame {
+        min-height: 100vh;
+        border: 1px solid #242426;
+        background: var(--bg);
+      }
+
+      .windowbar {
+        height: 46px;
+        display: grid;
+        grid-template-columns: 90px 1fr 90px;
+        align-items: center;
+        padding: 0 14px;
+        background: #0b0b0c;
+        border-bottom: 1px solid #242426;
+        user-select: none;
+        cursor: grab;
+      }
+      .windowbar.dragging {
+        cursor: grabbing;
+      }
+      .window-title {
+        justify-self: center;
+        color: #d7d7dc;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .page {
+        width: 100%;
+        margin: 0;
+        padding: 20px 28px 48px;
+      }
+
+      .titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 2px 18px;
+        user-select: none;
+      }
+      .titlebar h1 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.37px;
+        line-height: 1.1;
+      }
+      .subtitle {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 4px;
+        font-size: 13.5px;
+        color: var(--secondary);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--tertiary);
+        flex: none;
+        transition: all 0.25s ease;
+      }
+      .dot.good {
+        background: var(--green);
+      }
+      .dot.bad {
+        background: var(--red);
+      }
+      .nav-btn {
+        flex: none;
+        appearance: none;
+        border: none;
+        background: var(--group);
+        color: var(--blue);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.06s ease;
+      }
+      .nav-btn:hover {
+        background: var(--group-press);
+      }
+      .nav-btn:active {
+        transform: scale(0.94);
+      }
+      .nav-btn svg {
+        width: 19px;
+        height: 19px;
+        stroke: var(--blue);
+      }
+
+      /* 30 / 70 split */
+      .layout {
+        display: grid;
+        grid-template-columns: clamp(300px, 28vw, 430px) minmax(0, 1fr);
+        gap: 28px;
+        align-items: start;
+      }
+      .left {
+        position: sticky;
+        top: 20px;
+        display: grid;
+        gap: 22px;
+      }
+
+      .preview-card {
+        position: relative;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #0a0a0c;
+        aspect-ratio: 16 / 9;
+        box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
+      }
+      .preview-card video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .preview-card video.mirrored {
+        transform: scaleX(-1);
+      }
+      .preview-caption {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 9px 4px 0;
+        font-size: 12.5px;
+        color: var(--secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .preview-caption .cap-item::before {
+        content: "·";
+        margin-right: 8px;
+        color: var(--tertiary);
+      }
+
+      .section-header {
+        margin: 0 0 6px 16px;
+        font-size: 12.5px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--secondary);
+      }
+      .group {
+        background: var(--group);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .section-footer {
+        margin: 6px 16px 0;
+        font-size: 12.5px;
+        line-height: 1.4;
+        color: var(--secondary);
+      }
+
+      /* Cells */
+      .cell {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 11px 15px;
+        min-height: 46px;
+        background: transparent;
+        border: none;
+        text-align: left;
+        color: var(--label);
+        font: inherit;
+        cursor: pointer;
+      }
+      .cell::after {
+        content: "";
+        position: absolute;
+        left: 15px;
+        right: 0;
+        bottom: 0;
+        height: 0.5px;
+        background: var(--separator);
+        transform: scaleY(0.5);
+      }
+      .group > .cell:last-child::after,
+      .group > .section-stack:last-child .cell:last-child::after {
+        display: none;
+      }
+      button.cell:hover,
+      button.cell:active {
+        background: var(--group-press);
+      }
+
+      .cell-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .cell-icon svg {
+        width: 17px;
+        height: 17px;
+        stroke: #fff;
+      }
+      .icon-blue {
+        background: var(--blue);
+      }
+      .icon-orange {
+        background: #ff9f0a;
+      }
+      .icon-purple {
+        background: #bf5af2;
+      }
+      .icon-teal {
+        background: #40c8e0;
+      }
+      .icon-pink {
+        background: #ff375f;
+      }
+      .icon-gray {
+        background: #8e8e93;
+      }
+      .icon-green {
+        background: var(--green);
+      }
+
+      .cell-text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .cell-title {
+        font-size: 16px;
+        letter-spacing: -0.3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cell-sub {
+        font-size: 12.5px;
+        color: var(--secondary);
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cell-value {
+        font-size: 15px;
+        color: var(--secondary);
+        font-variant-numeric: tabular-nums;
+        flex: none;
+        max-width: 55%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .check {
+        width: 19px;
+        height: 19px;
+        flex: none;
+        stroke: var(--blue);
+        stroke-width: 2.6;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+      }
+      .cell.selected .check {
+        opacity: 1;
+      }
+
+      /* Slider cell */
+      .slider-cell {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        cursor: default;
+        padding: 12px 15px;
+      }
+      .slider-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .slider-head .name {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 15px;
+        letter-spacing: -0.3px;
+        min-width: 0;
+      }
+      .slider-head .name .cell-icon {
+        width: 24px;
+        height: 24px;
+      }
+      .slider-head .name .cell-icon svg {
+        width: 15px;
+        height: 15px;
+      }
+      .slider-head .val {
+        font-size: 13.5px;
+        color: var(--secondary);
+        font-variant-numeric: tabular-nums;
+        background: rgb(120 120 128 / 24%);
+        padding: 2px 8px;
+        border-radius: 7px;
+        flex: none;
+      }
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 16px;
+        background: transparent;
+        outline: none;
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 5px;
+        border-radius: 999px;
+        background: linear-gradient(
+          to right,
+          var(--blue) 0%,
+          var(--blue) var(--pct, 0%),
+          var(--fill-track) var(--pct, 0%),
+          var(--fill-track) 100%
+        );
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+        margin-top: -5px;
+        transition: transform 0.1s ease;
+      }
+      input[type="range"]:hover::-webkit-slider-thumb {
+        transform: scale(1.12);
+      }
+      input[type="range"]:active::-webkit-slider-thumb {
+        transform: scale(1.2);
+      }
+
+      /* Right column layout */
+      .right-grid {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.9fr) minmax(440px, 1.25fr);
+        gap: 20px;
+        align-items: start;
+      }
+      #sec-flicker {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      #sec-lens {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      #sec-image {
+        grid-column: 2;
+        grid-row: 1 / 3;
+      }
+      #sec-device {
+        grid-column: 1 / 3;
+        grid-row: 3;
+      }
+
+      /* Full-width image sliders; 2x2 was too cramped and clipped labels/values. */
+      .group.grid2 {
+        display: grid;
+        grid-template-columns: 1fr;
+        background: var(--group);
+      }
+      .group.grid2 .cell {
+        background: var(--group);
+      }
+
+      .toggle-cell {
+        cursor: default;
+      }
+      .switch {
+        flex: none;
+        width: 51px;
+        height: 31px;
+        border-radius: 999px;
+        background: #39393d;
+        border: none;
+        padding: 0;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.22s ease;
+      }
+      .switch[aria-checked="true"] {
+        background: var(--green);
+      }
+      .switch .knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 27px;
+        height: 27px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 2px 4px rgb(0 0 0 / 35%), 0 0 1px rgb(0 0 0 / 30%);
+        transition: transform 0.22s ease;
+      }
+      .switch[aria-checked="true"] .knob {
+        transform: translateX(20px);
+      }
+
+      .destructive {
+        justify-content: center;
+        color: var(--red);
+        font-size: 16px;
+      }
+      .stack-gap {
+        margin-top: 8px;
+      }
+      .empty {
+        padding: 14px 15px;
+        color: var(--secondary);
+        font-size: 14px;
+      }
+
+      details.advanced summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      details.advanced summary::-webkit-details-marker {
+        display: none;
+      }
+      details.advanced .chev-d {
+        margin-left: auto;
+        width: 14px;
+        height: 14px;
+        stroke: var(--tertiary);
+        transition: transform 0.2s ease;
+      }
+      details.advanced[open] .chev-d {
+        transform: rotate(180deg);
+      }
+      pre.status {
+        margin: 0;
+        padding: 13px 15px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #0c0c0e;
+        color: #a0a0a8;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        max-height: 220px;
+        overflow: auto;
+        border-top: 0.5px solid var(--separator);
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 26px;
+        transform: translate(-50%, 26px);
+        background: rgb(44 44 46 / 96%);
+        backdrop-filter: blur(20px);
+        color: #fff;
+        padding: 11px 19px;
+        border-radius: 13px;
+        font-size: 14.5px;
+        font-weight: 600;
+        box-shadow: 0 12px 34px rgb(0 0 0 / 55%);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        z-index: 60;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .toast .dot {
+        width: 7px;
+        height: 7px;
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .left {
+          position: static;
+        }
+        #sec-flicker,
+        #sec-lens,
+        #sec-image,
+        #sec-device {
+          grid-column: 1;
+          grid-row: auto;
+        }
+        .right-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (min-width: 1450px) {
+        .page {
+          padding-left: 36px;
+          padding-right: 36px;
+        }
+        .layout {
+          grid-template-columns: clamp(380px, 30vw, 520px) minmax(0, 1fr);
+          gap: 34px;
+        }
+        .right-grid {
+          grid-template-columns: minmax(360px, 0.85fr) minmax(520px, 1.25fr);
+          gap: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-frame">
+      <div class="windowbar" id="windowbar">
+        <div></div>
+        <div class="window-title">Slim Fit Studio</div>
+        <div></div>
+      </div>
+
+      <div class="page">
+        <div class="titlebar">
+          <div>
+            <h1>Camera</h1>
+            <div class="subtitle">
+              <span class="dot" id="connDot"></span>
+              <span id="connText">Connecting…</span>
+            </div>
+          </div>
+          <button class="nav-btn" id="refreshStatus" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="layout">
+        <!-- LEFT 30%: preview + camera picker -->
+        <div class="left">
+          <div>
+            <div class="preview-card">
+              <video id="preview" autoplay muted playsinline></video>
+            </div>
+            <div class="preview-caption">
+              <span class="dot good"></span>
+              <span id="previewLabel">Live</span>
+              <span class="cap-item" id="resWrap" hidden>—</span>
+              <span class="cap-item" id="zoomWrap" hidden>Zoom 100%</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="section-header">Camera</div>
+            <div class="group" id="cameraList">
+              <div class="empty">Looking for cameras…</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="section-header">Preview</div>
+            <div class="group">
+              <div class="cell toggle-cell">
+                <span class="cell-icon icon-purple" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v18" /><path d="M8 7l-4 5 4 5" /><path d="M16 7l4 5-4 5" />
+                  </svg>
+                </span>
+                <span class="cell-text">
+                  <span class="cell-title">Camera flip</span>
+                  <span class="cell-sub">Flip preview horizontally</span>
+                </span>
+                <button class="switch" id="mirrorSwitch" role="switch" aria-checked="true" aria-label="Mirror preview">
+                  <span class="knob"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT 70%: all controls -->
+        <div class="right-grid">
+          <div class="section" id="sec-flicker">
+            <div class="section-header">Anti-flicker</div>
+            <div class="group">
+              <button class="cell option" data-mode="50hz">
+                <span class="cell-icon icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg></span>
+                <span class="cell-text"><span class="cell-title">50 Hz</span><span class="cell-sub">India / Europe — fixes tube-light flicker</span></span>
+                <svg class="check" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              </button>
+              <button class="cell option" data-mode="60hz">
+                <span class="cell-icon icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg></span>
+                <span class="cell-text"><span class="cell-title">60 Hz</span><span class="cell-sub">US — camera default</span></span>
+                <svg class="check" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              </button>
+              <button class="cell option" data-mode="disabled">
+                <span class="cell-icon icon-gray"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M4.9 4.9l14.2 14.2" /></svg></span>
+                <span class="cell-text"><span class="cell-title">Off</span><span class="cell-sub">Disabled</span></span>
+                <svg class="check" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              </button>
+            </div>
+            <div class="section-footer">In India, choose 50 Hz to remove flicker under tube lights.</div>
+          </div>
+
+          <div class="section" id="sec-lens">
+            <div class="section-header">Lens</div>
+            <div class="group" id="lensList"><div class="empty">Loading…</div></div>
+          </div>
+
+          <div class="section" id="sec-image">
+            <div class="section-header">Image adjustments</div>
+            <div class="group grid2" id="imageList"><div class="empty">Loading…</div></div>
+            <div class="group stack-gap">
+              <button class="cell destructive" id="resetImage">Reset to defaults</button>
+            </div>
+          </div>
+
+          <div class="section" id="sec-device">
+            <div class="section-header">Device</div>
+            <div class="group">
+              <div class="cell" style="cursor: default">
+                <span class="cell-text"><span class="cell-title">Detected camera</span></span>
+                <span class="cell-value" id="deviceName">—</span>
+              </div>
+              <details class="advanced">
+                <summary class="cell">
+                  <span class="cell-text"><span class="cell-title">Advanced &amp; debug</span></span>
+                  <svg class="chev-d" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </summary>
+                <pre id="status" class="status">Loading…</pre>
+              </details>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">
+      <span class="dot"></span><span id="toastText"></span>
+    </div>
+
+    <script>
+      const $ = (s) => document.querySelector(s);
+      const preview = $("#preview");
+      const refreshStatus = $("#refreshStatus");
+      const resetImage = $("#resetImage");
+      const statusBox = $("#status");
+      const deviceName = $("#deviceName");
+      const previewLabel = $("#previewLabel");
+      const zoomWrap = $("#zoomWrap");
+      const resWrap = $("#resWrap");
+      const connDot = $("#connDot");
+      const connText = $("#connText");
+      const toast = $("#toast");
+      const toastText = $("#toastText");
+      const lensList = $("#lensList");
+      const imageList = $("#imageList");
+      const cameraList = $("#cameraList");
+      const mirrorSwitch = $("#mirrorSwitch");
+      const modeButtons = [...document.querySelectorAll("[data-mode]")];
+
+      // Manual window dragging. This avoids relying on CSS app-region, which
+      // proved unreliable on this Electron/macOS combination.
+      const titlebar = document.querySelector("#windowbar");
+      if (window.winControl) {
+        let dragging = false;
+        let originWin = [0, 0];
+        let startMouse = [0, 0];
+        let pending = null;
+        let raf = null;
+
+        function isInteractiveTarget(target) {
+          return Boolean(
+            target.closest(
+              "button, a, input, select, summary, details, video, .preview-card, .cell, .group"
+            )
+          );
+        }
+
+        async function beginDrag(e) {
+          if (e.button !== 0 || isInteractiveTarget(e.target)) return;
+          startMouse = [e.screenX, e.screenY];
+          originWin = await window.winControl.getPosition();
+          dragging = true;
+          titlebar?.classList.add("dragging");
+        }
+
+        titlebar?.addEventListener("mousedown", async (e) => {
+          if (e.target.closest("button, a, input, select")) return;
+          e.stopPropagation();
+          await beginDrag(e);
+        });
+        document.body.addEventListener("mousedown", beginDrag);
+
+        window.addEventListener("mousemove", (e) => {
+          if (!dragging) return;
+          pending = [
+            originWin[0] + (e.screenX - startMouse[0]),
+            originWin[1] + (e.screenY - startMouse[1])
+          ];
+          if (!raf) {
+            raf = requestAnimationFrame(() => {
+              raf = null;
+              if (pending) window.winControl.setPosition(pending[0], pending[1]);
+            });
+          }
+        });
+
+        const endDrag = () => {
+          dragging = false;
+          titlebar?.classList.remove("dragging");
+        };
+        window.addEventListener("mouseup", endDrag);
+        window.addEventListener("blur", endDrag);
+      }
+
+      const storedMirror = localStorage.getItem("mirrorPreview");
+      let mirrored = storedMirror === null ? true : storedMirror === "1";
+      function applyMirror() {
+        preview.classList.toggle("mirrored", mirrored);
+        mirrorSwitch.setAttribute("aria-checked", String(mirrored));
+      }
+      mirrorSwitch.addEventListener("click", () => {
+        mirrored = !mirrored;
+        localStorage.setItem("mirrorPreview", mirrored ? "1" : "0");
+        applyMirror();
+      });
+      applyMirror();
+
+      const DEFAULTS = { absolute_zoom: 100, brightness: 128, contrast: 128, saturation: 128, sharpness: 128 };
+      const ICON_CLASS = { zoom: "icon-blue", sun: "icon-orange", contrast: "icon-purple", drop: "icon-teal", sharp: "icon-pink" };
+      const ICONS = {
+        zoom: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/>',
+        sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+        contrast: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="#fff" stroke="none"/>',
+        drop: '<path d="M12 2.7s6 6.3 6 10.3a6 6 0 0 1-12 0c0-4 6-10.3 6-10.3z"/>',
+        sharp: '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>'
+      };
+
+      let stream;
+      let currentDeviceId = "";
+      let cameraOptions = [];
+      const sliderState = new Map();
+      let toastTimer;
+
+      function modeLabel(m) {
+        return { "50hz": "50 Hz", "60hz": "60 Hz", disabled: "Off" }[m] || "Unknown";
+      }
+      function showToast(message, kind = "") {
+        toastText.textContent = message;
+        toast.className = `toast show ${kind}`.trim();
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+      function setConn(state, text) {
+        connDot.className = `dot ${state}`.trim();
+        connText.textContent = text;
+      }
+      function setActiveMode(mode) {
+        for (const b of modeButtons) b.classList.toggle("selected", b.dataset.mode === mode);
+      }
+      function setStatus(value) {
+        statusBox.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+      function pct(c) {
+        const span = c.max - c.min;
+        return span ? ((c.value - c.min) / span) * 100 : 0;
+      }
+      function zoomPercent(c) {
+        const span = c.max - c.min;
+        return span ? Math.round(((c.value - c.min) / span) * 300 + 100) : 100;
+      }
+      function displayValue(c) {
+        return c.key === "absolute_zoom" ? `${zoomPercent(c)}%` : String(c.value);
+      }
+      function updateZoomPill(c) {
+        zoomWrap.hidden = false;
+        zoomWrap.textContent = `Zoom ${zoomPercent(c)}%`;
+      }
+
+      function makeLiveWriter(key) {
+        let inFlight = false;
+        let pending = null;
+        async function flush() {
+          if (inFlight || pending === null) return;
+          const value = pending;
+          pending = null;
+          inFlight = true;
+          try {
+            await fetch(`/api/set?control=${encodeURIComponent(key)}&value=${value}`);
+          } catch (_) {
+          } finally {
+            inFlight = false;
+            flush();
+          }
+        }
+        return (value) => {
+          pending = value;
+          flush();
+        };
+      }
+
+      function renderSlider(control) {
+        const cell = document.createElement("div");
+        cell.className = "cell slider-cell";
+        cell.dataset.key = control.key;
+        const iconClass = ICON_CLASS[control.icon] || "icon-gray";
+        cell.innerHTML = `
+          <div class="slider-head">
+            <span class="name">
+              <span class="cell-icon ${iconClass}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[control.icon] || ICONS.sun}</svg></span>
+              ${control.label}
+            </span>
+            <span class="val" data-role="val">${displayValue(control)}</span>
+          </div>
+          <input type="range" min="${control.min}" max="${control.max}" value="${control.value}" step="1" />
+        `;
+        const input = cell.querySelector("input");
+        const valEl = cell.querySelector('[data-role="val"]');
+        const write = makeLiveWriter(control.key);
+        const paint = () => {
+          input.style.setProperty("--pct", `${pct(control)}%`);
+          valEl.textContent = displayValue(control);
+          if (control.key === "absolute_zoom") updateZoomPill(control);
+        };
+        paint();
+        input.addEventListener("input", () => {
+          control.value = Number(input.value);
+          paint();
+          write(input.value);
+        });
+        sliderState.set(control.key, { control, input, paint });
+        return cell;
+      }
+
+      function renderControls(controls) {
+        sliderState.clear();
+        lensList.replaceChildren();
+        imageList.replaceChildren();
+        const lens = controls.filter((c) => c.group === "lens");
+        const image = controls.filter((c) => c.group === "image");
+        if (!lens.length) lensList.innerHTML = '<div class="empty">No lens controls.</div>';
+        else lens.forEach((c) => lensList.append(renderSlider(c)));
+        if (!image.length) imageList.innerHTML = '<div class="empty">No image controls.</div>';
+        else image.forEach((c) => imageList.append(renderSlider(c)));
+      }
+
+      function renderCameraRows() {
+        cameraList.replaceChildren();
+        if (!cameraOptions.length) {
+          cameraList.innerHTML = '<div class="empty">No cameras found.</div>';
+          return;
+        }
+        cameraOptions.forEach((cam, i) => {
+          const isSamsung = /samsung|slim\s*fit|slimfit/i.test(cam.label);
+          const row = document.createElement("button");
+          row.className = "cell option" + (cam.deviceId === currentDeviceId ? " selected" : "");
+          row.innerHTML = `
+            <span class="cell-icon ${isSamsung ? "icon-green" : "icon-gray"}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
+            <span class="cell-text"><span class="cell-title">${cam.label || `Camera ${i + 1}`}</span></span>
+            <svg class="check" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          `;
+          row.addEventListener("click", () => {
+            if (cam.deviceId === currentDeviceId) return;
+            currentDeviceId = cam.deviceId;
+            renderCameraRows();
+            startCamera().catch(() => {});
+          });
+          cameraList.append(row);
+        });
+      }
+
+      async function loadStatus() {
+        const data = await (await fetch("/api/status")).json();
+        deviceName.textContent = data.samsung
+          ? data.samsung.name || "Samsung Slim Fit Cam"
+          : data.uvccAvailable
+            ? "Not found"
+            : "Unavailable";
+        if (data.samsung && data.supportsPowerLineFrequency) setConn("good", "Camera connected");
+        else if (data.uvccAvailable) setConn("bad", "Limited control");
+        else setConn("bad", "Backend offline");
+        setActiveMode(data.powerLineFrequency?.mode || null);
+        renderControls(data.controls || []);
+        setStatus({
+          uvccAvailable: data.uvccAvailable,
+          samsungDetected: Boolean(data.samsung),
+          supportsPowerLineFrequency: data.supportsPowerLineFrequency,
+          powerLineFrequency: data.powerLineFrequency,
+          controls: (data.controls || []).map((c) => ({ key: c.key, value: c.value, min: c.min, max: c.max }))
+        });
+      }
+
+      async function setMode(mode) {
+        setActiveMode(mode);
+        modeButtons.forEach((b) => (b.style.pointerEvents = "none"));
+        try {
+          const data = await (await fetch(`/api/set?mode=${encodeURIComponent(mode)}`)).json();
+          if (!data.result?.ok) {
+            setStatus(data);
+            showToast(`Could not set ${modeLabel(mode)}`, "bad");
+          } else showToast(`Anti-flicker set to ${modeLabel(mode)}`, "good");
+        } catch (e) {
+          showToast("Request failed", "bad");
+        } finally {
+          modeButtons.forEach((b) => (b.style.pointerEvents = ""));
+        }
+      }
+
+      async function applyValue(key, value) {
+        const state = sliderState.get(key);
+        if (!state) return;
+        state.control.value = value;
+        state.input.value = value;
+        state.paint();
+        try {
+          await fetch(`/api/set?control=${encodeURIComponent(key)}&value=${value}`);
+        } catch (_) {}
+      }
+      async function resetDefaults() {
+        for (const key of [...sliderState.keys()]) if (DEFAULTS[key] !== undefined) await applyValue(key, DEFAULTS[key]);
+        showToast("Reset to defaults", "good");
+      }
+
+      async function refreshCameraList() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        cameraOptions = devices
+          .filter((d) => d.kind === "videoinput")
+          .map((d) => ({ deviceId: d.deviceId, label: d.label }));
+        if (!currentDeviceId && cameraOptions.length) {
+          const samsung = cameraOptions.find((c) => /samsung|slim\s*fit|slimfit/i.test(c.label));
+          currentDeviceId = (samsung || cameraOptions[0]).deviceId;
+        }
+        previewLabel.textContent = "Live";
+        renderCameraRows();
+      }
+
+      function updateResPill() {
+        const track = stream?.getVideoTracks()[0];
+        if (!track) return;
+        const s = track.getSettings();
+        if (s.width && s.height) {
+          resWrap.hidden = false;
+          resWrap.textContent = `${s.width}×${s.height}${s.frameRate ? ` · ${Math.round(s.frameRate)}fps` : ""}`;
+        }
+      }
+
+      async function startCamera() {
+        if (stream) for (const t of stream.getTracks()) t.stop();
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: currentDeviceId ? { exact: currentDeviceId } : undefined,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 25, max: 30 }
+          },
+          audio: false
+        });
+        preview.srcObject = stream;
+        currentDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || currentDeviceId;
+        await refreshCameraList();
+        setTimeout(updateResPill, 300);
+      }
+
+      refreshStatus.addEventListener("click", async () => {
+        try {
+          await startCamera();
+        } catch (_) {}
+        loadStatus().catch(() => {});
+      });
+      resetImage.addEventListener("click", () => resetDefaults());
+      modeButtons.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+      (async function init() {
+        try {
+          const perm = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          perm.getTracks().forEach((t) => t.stop());
+          await refreshCameraList();
+          await startCamera();
+          await loadStatus();
+        } catch (e) {
+          setConn("bad", "Camera blocked");
+          await refreshCameraList().catch(() => {});
+          await loadStatus().catch(() => {});
+          setStatus(`Camera permission or preview failed: ${e.message}`);
+        }
+      })();
+    </script>
+  </body>
+</html>

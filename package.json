@@ -1,0 +1,72 @@
+{
+  "name": "samsung-slimfit-camera-settings",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slim Fit Studio — Samsung Slim Fit Camera control app for macOS.",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node server.js",
+    "doctor": "node server.js --doctor",
+    "app": "electron .",
+    "app:build": "electron-builder --mac"
+  },
+  "dependencies": {
+    "node": "^20.20.2",
+    "uvcc": "latest"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "dev.slimfit.studio",
+    "productName": "Slim Fit Studio",
+    "directories": {
+      "output": "dist-app"
+    },
+    "asar": false,
+    "files": [
+      "electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "server.js",
+        "to": "app-payload/server.js"
+      },
+      {
+        "from": "public",
+        "to": "app-payload/public"
+      },
+      {
+        "from": "node_modules",
+        "to": "app-payload/node_modules",
+        "filter": [
+          "**/*",
+          "!electron/**",
+          "!electron/**/*",
+          "!electron-builder/**",
+          "!app-builder-bin/**",
+          "!dmg-builder/**",
+          "!@electron/**",
+          "!7zip-bin/**"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "icon": "build/icon.icns",
+      "target": [
+        "dir"
+      ],
+      "extendInfo": {
+        "NSCameraUsageDescription": "Slim Fit Studio shows a live preview from your camera so you can see anti-flicker, zoom and image changes."
+      }
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
