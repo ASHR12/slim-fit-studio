@@ -1,10 +1,12 @@
 # Slim Fit Studio
 
-Slim Fit Studio is a macOS Electron app for controlling a Samsung SlimFit Cam over USB Video Class (UVC) hardware controls.
+Slim Fit Studio is a macOS Electron app for controlling compatible USB Video Class (UVC) webcams.
 
 It was built to fix indoor-light flicker on the Samsung SlimFit Cam in India. The camera was using a 60 Hz anti-flicker setting by default, while India uses 50 Hz power frequency. That mismatch can cause visible flickering or banding under indoor lighting.
 
-Samsung does not expose this setting in the monitor UI, and macOS does not provide a built-in camera control panel for it. Slim Fit Studio reads the camera's UVC controls and lets you set the camera's hardware anti-flicker mode to 50 Hz, plus adjust other controls the camera exposes.
+Samsung does not expose this setting in the monitor UI, and macOS does not provide a built-in camera control panel for it. Slim Fit Studio reads the selected camera's UVC controls and lets you set the camera's hardware anti-flicker mode to 50 Hz, plus adjust other controls the camera exposes.
+
+The app is built and tested with the Samsung SlimFit Cam, but the control path is generic: any UVC webcam that exposes the same controls can be selected and adjusted.
 
 ## Features
 
@@ -50,7 +52,7 @@ Slim Fit Studio wraps that lower-level flow with device discovery, a preview, sl
 ## Requirements
 
 - macOS
-- Samsung SlimFit Cam or another UVC camera exposing similar controls
+- Samsung SlimFit Cam or another UVC webcam exposing similar controls
 - Node.js / npm for development
 
 The packaged app bundles the Node runtime it needs.
@@ -115,6 +117,7 @@ The app is unsigned. On first launch, macOS may require right-clicking the app a
 - Background replacement is not a UVC hardware setting and is not supported.
 - The current build target is Apple Silicon (`mac-arm64`).
 - Controls depend on what the connected camera exposes over UVC.
+- Built-in Mac cameras may appear for preview, but often do not expose configurable UVC hardware controls.
 
 ## Notes
 

@@ -801,6 +801,7 @@
       let stream;
       let currentDeviceId = "";
       let cameraOptions = [];
+      let uvcDevices = [];
       const sliderState = new Map();
       let toastTimer;
 
@@ -839,6 +840,51 @@
         zoomWrap.textContent = `Zoom ${zoomPercent(c)}%`;
       }
 
+      function parseCameraIds(label = "") {
+        const match = label.match(/\(([0-9a-f]{4}):([0-9a-f]{4})\)/i);
+        if (!match) return null;
+
+        return {
+          vendor: `0x${match[1].toLowerCase()}`,
+          product: `0x${match[2].toLowerCase()}`
+        };
+      }
+
+      function canonicalId(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? `0x${number.toString(16)}` : String(value || "").toLowerCase();
+      }
+
+      function selectedBrowserCamera() {
+        return cameraOptions.find((camera) => camera.deviceId === currentDeviceId) || null;
+      }
+
+      function selectedControlTarget() {
+        const selected = selectedBrowserCamera();
+        const ids = parseCameraIds(selected?.label);
+        if (ids) return ids;
+
+        const label = selected?.label || "";
+        const matched = uvcDevices.find((device) =>
+          label.toLowerCase().includes((device.name || "").toLowerCase())
+        );
+        if (matched?.vendorId && matched?.productId) {
+          return { vendor: matched.vendorId, product: matched.productId };
+        }
+
+        return null;
+      }
+
+      function withSelectedTarget(url) {
+        const target = selectedControlTarget();
+        if (!target) return url;
+
+        const separator = url.includes("?") ? "&" : "?";
+        return `${url}${separator}vendor=${encodeURIComponent(target.vendor)}&product=${encodeURIComponent(
+          target.product
+        )}`;
+      }
+
       function makeLiveWriter(key) {
         let inFlight = false;
         let pending = null;
@@ -848,7 +894,7 @@
           pending = null;
           inFlight = true;
           try {
-            await fetch(`/api/set?control=${encodeURIComponent(key)}&value=${value}`);
+            await fetch(withSelectedTarget(`/api/set?control=${encodeURIComponent(key)}&value=${value}`));
           } catch (_) {
           } finally {
             inFlight = false;
@@ -913,39 +959,57 @@
           return;
         }
         cameraOptions.forEach((cam, i) => {
-          const isSamsung = /samsung|slim\s*fit|slimfit/i.test(cam.label);
+          const ids = parseCameraIds(cam.label);
+          const isUvcCompatible = Boolean(
+            ids &&
+              uvcDevices.some(
+                (device) =>
+                  canonicalId(device.vendorId) === canonicalId(ids.vendor) &&
+                  canonicalId(device.productId) === canonicalId(ids.product)
+              )
+          );
           const row = document.createElement("button");
           row.className = "cell option" + (cam.deviceId === currentDeviceId ? " selected" : "");
           row.innerHTML = `
-            <span class="cell-icon ${isSamsung ? "icon-green" : "icon-gray"}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
-            <span class="cell-text"><span class="cell-title">${cam.label || `Camera ${i + 1}`}</span></span>
+            <span class="cell-icon ${isUvcCompatible ? "icon-green" : "icon-gray"}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
+            <span class="cell-text"><span class="cell-title">${cam.label || `Camera ${i + 1}`}</span><span class="cell-sub">${isUvcCompatible ? "Hardware controls available" : "Preview only"}</span></span>
             <svg class="check" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
           `;
           row.addEventListener("click", () => {
             if (cam.deviceId === currentDeviceId) return;
             currentDeviceId = cam.deviceId;
             renderCameraRows();
-            startCamera().catch(() => {});
+            startCamera()
+              .then(() => loadStatus())
+              .catch(() => {});
           });
           cameraList.append(row);
         });
       }
 
       async function loadStatus() {
-        const data = await (await fetch("/api/status")).json();
-        deviceName.textContent = data.samsung
-          ? data.samsung.name || "Samsung Slim Fit Cam"
-          : data.uvccAvailable
-            ? "Not found"
-            : "Unavailable";
-        if (data.samsung && data.supportsPowerLineFrequency) setConn("good", "Camera connected");
-        else if (data.uvccAvailable) setConn("bad", "Limited control");
+        const data = await (await fetch(withSelectedTarget("/api/status"))).json();
+        uvcDevices = data.devices || [];
+
+        const selected = selectedBrowserCamera();
+        const hasHardwareControls = Boolean(data.supportsPowerLineFrequency || data.controls?.length);
+
+        deviceName.textContent =
+          data.selectedDevice?.raw?.source !== "request"
+            ? data.selectedDevice?.name || selected?.label || "UVC camera"
+            : selected?.label || "Not UVC compatible";
+
+        if (hasHardwareControls) setConn("good", "Hardware controls ready");
+        else if (data.uvccAvailable) setConn("bad", "No UVC controls");
         else setConn("bad", "Backend offline");
+
         setActiveMode(data.powerLineFrequency?.mode || null);
         renderControls(data.controls || []);
+        renderCameraRows();
         setStatus({
           uvccAvailable: data.uvccAvailable,
-          samsungDetected: Boolean(data.samsung),
+          selectedCamera: selected?.label || null,
+          selectedUvcDevice: data.selectedDevice || null,
           supportsPowerLineFrequency: data.supportsPowerLineFrequency,
           powerLineFrequency: data.powerLineFrequency,
           controls: (data.controls || []).map((c) => ({ key: c.key, value: c.value, min: c.min, max: c.max }))
@@ -956,7 +1020,7 @@
         setActiveMode(mode);
         modeButtons.forEach((b) => (b.style.pointerEvents = "none"));
         try {
-          const data = await (await fetch(`/api/set?mode=${encodeURIComponent(mode)}`)).json();
+          const data = await (await fetch(withSelectedTarget(`/api/set?mode=${encodeURIComponent(mode)}`))).json();
           if (!data.result?.ok) {
             setStatus(data);
             showToast(`Could not set ${modeLabel(mode)}`, "bad");
@@ -975,7 +1039,7 @@
         state.input.value = value;
         state.paint();
         try {
-          await fetch(`/api/set?control=${encodeURIComponent(key)}&value=${value}`);
+          await fetch(withSelectedTarget(`/api/set?control=${encodeURIComponent(key)}&value=${value}`));
         } catch (_) {}
       }
       async function resetDefaults() {

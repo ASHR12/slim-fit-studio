@@ -191,6 +191,57 @@ function findSamsungDevice(devices) {
   );
 }
 
+function canonicalId(value) {
+  const id = normalizeId(value);
+  if (!id) {
+    return null;
+  }
+
+  const number = Number(id);
+  return Number.isFinite(number) ? `0x${number.toString(16)}` : id.toLowerCase();
+}
+
+function sameId(left, right) {
+  return canonicalId(left) === canonicalId(right);
+}
+
+function deviceKey(device) {
+  if (!device?.vendorId || !device?.productId) {
+    return null;
+  }
+
+  return `${canonicalId(device.vendorId)}:${canonicalId(device.productId)}`;
+}
+
+function requestedDevice(searchParams) {
+  const vendorId = normalizeId(searchParams.get("vendor") || searchParams.get("vendorId"));
+  const productId = normalizeId(searchParams.get("product") || searchParams.get("productId"));
+
+  if (!vendorId || !productId) {
+    return null;
+  }
+
+  return {
+    name: `${vendorId}:${productId}`,
+    vendorId,
+    productId,
+    raw: { source: "request" }
+  };
+}
+
+function selectDevice(devices, requested) {
+  if (requested) {
+    return (
+      devices.find(
+        (device) =>
+          sameId(device.vendorId, requested.vendorId) && sameId(device.productId, requested.productId)
+      ) || requested
+    );
+  }
+
+  return findSamsungDevice(devices) || devices.find((device) => device.vendorId && device.productId) || null;
+}
+
 function targetArgs(device) {
   if (!device?.vendorId || !device?.productId) {
     return [];
@@ -204,24 +255,32 @@ function targetArgs(device) {
 const deviceCache = {
   target: [],
   controls: [],
-  samsung: null,
+  selectedDevice: null,
+  key: null,
   at: 0
 };
 
 const CACHE_TTL_MS = 30_000;
 
-async function ensureTarget() {
-  if (deviceCache.target.length && Date.now() - deviceCache.at < CACHE_TTL_MS) {
+async function ensureTarget(selection = {}) {
+  const requestedKey = selection.device ? deviceKey(selection.device) : null;
+
+  if (
+    deviceCache.target.length &&
+    deviceCache.key === requestedKey &&
+    Date.now() - deviceCache.at < CACHE_TTL_MS
+  ) {
     return deviceCache.target;
   }
 
   const deviceResult = await runUvcc(["devices"]);
   const devices = deviceResult.ok ? parseDevices(deviceResult.stdout) : [];
-  const samsung = findSamsungDevice(devices);
-  const target = targetArgs(samsung);
+  const selectedDevice = selectDevice(devices, selection.device || null);
+  const target = targetArgs(selectedDevice);
 
   deviceCache.target = target;
-  deviceCache.samsung = samsung || null;
+  deviceCache.selectedDevice = selectedDevice || null;
+  deviceCache.key = requestedKey;
   deviceCache.at = Date.now();
 
   return target;
@@ -249,11 +308,11 @@ function buildControlList(rangesJson, exportJson) {
   }).filter((control) => control.available);
 }
 
-async function cameraSnapshot() {
+async function cameraSnapshot(selection = {}) {
   const deviceResult = await runUvcc(["devices"]);
   const devices = deviceResult.ok ? parseDevices(deviceResult.stdout) : [];
-  const samsung = findSamsungDevice(devices);
-  const target = targetArgs(samsung);
+  const selectedDevice = selectDevice(devices, selection.device || null);
+  const target = targetArgs(selectedDevice);
 
   const controlsResult = await runUvcc([...target, "controls"]);
   const rangesResult = await runUvcc([...target, "ranges"]);
@@ -266,14 +325,17 @@ async function cameraSnapshot() {
   const controls = buildControlList(rangesJson, exportJson);
 
   deviceCache.target = target;
-  deviceCache.samsung = samsung || null;
+  deviceCache.selectedDevice = selectedDevice || null;
   deviceCache.controls = controls;
+  deviceCache.key = selection.device ? deviceKey(selection.device) : null;
   deviceCache.at = Date.now();
 
   return {
     uvccAvailable: deviceResult.ok,
     devices,
-    samsung,
+    selectedDevice,
+    // Backward-compatible alias for older UI/debug output.
+    samsung: selectedDevice,
     target,
     supportsPowerLineFrequency: /power[_\s-]?line[_\s-]?frequency/i.test(
       `${controlsResult.stdout}\n${controlsResult.stderr}`
@@ -291,7 +353,7 @@ async function cameraSnapshot() {
   };
 }
 
-async function setPowerLineFrequency(mode) {
+async function setPowerLineFrequency(mode, selection = {}) {
   const value = POWER_LINE_VALUES[mode];
   if (!value) {
     return {
@@ -300,19 +362,19 @@ async function setPowerLineFrequency(mode) {
     };
   }
 
-  const target = await ensureTarget();
+  const target = await ensureTarget(selection);
   const result = await runUvcc([...target, "set", "power_line_frequency", value]);
 
   return {
     kind: "anti-flicker",
     mode,
     value,
-    camera: deviceCache.samsung || null,
+    camera: deviceCache.selectedDevice || null,
     result
   };
 }
 
-async function setControl(controlName, rawValue) {
+async function setControl(controlName, rawValue, selection = {}) {
   if (!ADJUSTABLE_KEYS.has(controlName)) {
     return { ok: false, error: `Control "${controlName}" is not adjustable.` };
   }
@@ -323,7 +385,7 @@ async function setControl(controlName, rawValue) {
   }
 
   // Fast path: use cached target + range so a slider write is a single subprocess.
-  const target = await ensureTarget();
+  const target = await ensureTarget(selection);
   const meta = deviceCache.controls.find((control) => control.key === controlName);
 
   if (meta && Number.isFinite(meta.min) && Number.isFinite(meta.max)) {
@@ -373,9 +435,10 @@ async function serveStatic(request, response) {
 
 async function handleApi(request, response) {
   const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+  const selection = { device: requestedDevice(requestUrl.searchParams) };
 
   if (requestUrl.pathname === "/api/status") {
-    sendJson(response, 200, await cameraSnapshot());
+    sendJson(response, 200, await cameraSnapshot(selection));
     return;
   }
 
@@ -385,12 +448,12 @@ async function handleApi(request, response) {
 
     if (control) {
       const value = requestUrl.searchParams.get("value");
-      const result = await setControl(control, value);
+      const result = await setControl(control, value, selection);
       sendJson(response, result.result?.ok ? 200 : 500, result);
       return;
     }
 
-    const result = await setPowerLineFrequency(mode || "");
+    const result = await setPowerLineFrequency(mode || "", selection);
     sendJson(response, result.result?.ok ? 200 : 500, result);
     return;
   }
@@ -416,6 +479,6 @@ if (process.argv.includes("--doctor")) {
   console.log(JSON.stringify(snapshot, null, 2));
 } else {
   createServer(requestHandler).listen(port, () => {
-    console.log(`Samsung Slim Fit Camera control app: http://localhost:${port}`);
+    console.log(`Slim Fit Studio camera control app: http://localhost:${port}`);
   });
 }
