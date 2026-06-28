@@ -1,8 +1,10 @@
 # Slim Fit Studio
 
-Slim Fit Studio is a small macOS Electron app for controlling a Samsung SlimFit Cam over USB Video Class (UVC) hardware controls.
+Slim Fit Studio is a macOS Electron app for controlling a Samsung SlimFit Cam over USB Video Class (UVC) hardware controls.
 
-It was built to fix indoor-light flicker on the Samsung SlimFit Cam in India. The camera was using a 60 Hz anti-flicker setting by default, while India uses 50 Hz power frequency. Slim Fit Studio lets you switch the camera's `power_line_frequency` to 50 Hz and adjust other exposed camera controls.
+It was built to fix indoor-light flicker on the Samsung SlimFit Cam in India. The camera was using a 60 Hz anti-flicker setting by default, while India uses 50 Hz power frequency. That mismatch can cause visible flickering or banding under indoor lighting.
+
+Samsung does not expose this setting in the monitor UI, and macOS does not provide a built-in camera control panel for it. Slim Fit Studio reads the camera's UVC controls and lets you set the camera's hardware anti-flicker mode to 50 Hz, plus adjust other controls the camera exposes.
 
 ## Features
 
@@ -11,7 +13,8 @@ It was built to fix indoor-light flicker on the Samsung SlimFit Cam in India. Th
 - Live camera preview
 - Camera source selection
 - Preview-only camera flip
-- Native macOS Electron app packaging
+- macOS app packaging with a bundled Node/UVC control helper
+- Custom app icon
 
 ## How it works
 
@@ -27,6 +30,30 @@ The camera reported controls including:
 - `sharpness`
 
 The app uses `uvcc` under the hood to read and set these UVC controls. Electron provides the macOS app shell, while the camera-control server runs as a bundled Node child process.
+
+The anti-flicker values follow the UVC power-line frequency control:
+
+```text
+0 = Off
+1 = 50 Hz
+2 = 60 Hz
+```
+
+For the Samsung SlimFit Cam tested here:
+
+```bash
+uvcc --vendor 0x4e8 --product 0x20d3 set power_line_frequency 1
+```
+
+Slim Fit Studio wraps that lower-level flow with device discovery, a preview, sliders, and macOS packaging.
+
+## Requirements
+
+- macOS
+- Samsung SlimFit Cam or another UVC camera exposing similar controls
+- Node.js / npm for development
+
+The packaged app bundles the Node runtime it needs.
 
 ## Development
 
@@ -66,18 +93,33 @@ The built app is created at:
 dist-app/mac-arm64/Slim Fit Studio.app
 ```
 
-## Personal macOS install
+## Install locally
 
-After building, copy the app into `/Applications`:
+Build the app:
+
+```bash
+npm run app:build
+```
+
+Copy it to `/Applications`:
 
 ```bash
 cp -R "dist-app/mac-arm64/Slim Fit Studio.app" /Applications/
 ```
 
-This app is unsigned and intended for personal use. On first launch, macOS may require right-clicking the app and choosing **Open**.
+The app is unsigned. On first launch, macOS may require right-clicking the app and choosing **Open**.
+
+## Limitations
+
+- Camera flip is preview-only. It does not change the camera's hardware output.
+- Background replacement is not a UVC hardware setting and is not supported.
+- The current build target is Apple Silicon (`mac-arm64`).
+- Controls depend on what the connected camera exposes over UVC.
 
 ## Notes
 
-- The camera flip option only affects the preview inside Slim Fit Studio. It does not change the camera's hardware output.
-- The app is packaged for Apple Silicon (`mac-arm64`).
 - Generated folders like `node_modules/` and `dist-app/` are intentionally ignored by Git.
+
+## License
+
+MIT

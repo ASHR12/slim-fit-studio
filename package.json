@@ -1,8 +1,27 @@
 {
-  "name": "samsung-slimfit-camera-settings",
+  "name": "slim-fit-studio",
   "version": "0.1.0",
-  "private": true,
   "description": "Slim Fit Studio — Samsung Slim Fit Camera control app for macOS.",
+  "license": "MIT",
+  "author": "Ashutosh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ASHR12/slim-fit-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ASHR12/slim-fit-studio/issues"
+  },
+  "homepage": "https://github.com/ASHR12/slim-fit-studio#readme",
+  "keywords": [
+    "samsung",
+    "slimfit",
+    "webcam",
+    "uvc",
+    "macos",
+    "electron",
+    "anti-flicker",
+    "camera-control"
+  ],
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
